@@ -104,6 +104,36 @@ h1,h2,h3,p{margin:0}
 }
 .micro{font-size:12px;color:#AB96A0;line-height:1.7;text-align:center;margin-top:16px}
 
+/* ---------- 访问码 ---------- */
+.gate{padding:44px 26px 32px;text-align:center}
+.gate h1{
+  font-family:var(--serif);font-size:26px;line-height:1.5;font-weight:700;
+  margin:14px 0 12px;
+}
+.gate .lead{margin-bottom:24px}
+.code-input{
+  display:block;width:100%;text-align:center;
+  padding:19px 8px;border-radius:18px;
+  font-family:var(--serif);font-size:30px;font-weight:700;
+  letter-spacing:.40em;text-indent:.40em;color:var(--primary-d);
+  background:var(--soft);border:1.5px solid var(--line2);
+  outline:none;transition:border-color .18s,box-shadow .18s,background .18s;
+}
+.code-input::placeholder{
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+  font-size:15px;font-weight:600;letter-spacing:.06em;text-indent:.06em;color:#C6B2BA;
+}
+.code-input:focus{border-color:var(--primary);background:#fff;box-shadow:0 0 0 4px rgba(180,86,111,.10)}
+.gate-err{font-size:13px;font-weight:700;color:#C0455F;min-height:20px;margin-top:12px;line-height:1.5}
+.gate .btn{margin-top:4px}
+.gate .micro{margin-top:18px}
+.shake{animation:shake .38s ease}
+@keyframes shake{
+  0%,100%{transform:translateX(0)}
+  18%{transform:translateX(-7px)}38%{transform:translateX(7px)}
+  58%{transform:translateX(-4px)}78%{transform:translateX(4px)}
+}
+
 /* ---------- 前置选择 ---------- */
 .pref-head{text-align:center;margin-bottom:8px}
 .pref-head h2{
@@ -330,8 +360,22 @@ body.lock{overflow:hidden}
 <body>
 <div class="shell">
 
+  <!-- 访问码 -->
+  <section class="card gate up" id="screen-gate">
+    <div class="seal">钥</div>
+    <div class="kicker">恋爱人格图鉴</div>
+    <h1>请输入访问码</h1>
+    <p class="lead">访问码在购买后由客服发送。<br>输入后可无限次使用，不限时间。</p>
+    <input class="code-input" id="codeInput" type="text" inputmode="numeric"
+           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+           maxlength="6" placeholder="请输入访问码">
+    <p class="gate-err" id="codeErr"></p>
+    <button class="btn primary" id="codeBtn">进入测试</button>
+    <p class="micro">本设备验证一次即可，后续无需重复输入。<br>访问码遗失请凭订单联系客服。</p>
+  </section>
+
   <!-- 首页 -->
-  <section class="card hero up" id="screen-intro">
+  <section class="card hero up hidden" id="screen-intro">
     <div class="seal">恋</div>
     <div class="kicker">Relationship Archetype</div>
     <h1>你是哪一种<br><em>恋爱人格</em>？</h1>
@@ -699,7 +743,7 @@ body.lock{overflow:hidden}
   const TOTAL = 20;
 
   function show(id){
-    ["screen-intro","screen-pref","screen-quiz","screen-result"].forEach(k=>{
+    ["screen-gate","screen-intro","screen-pref","screen-quiz","screen-result"].forEach(k=>{
       $("#"+k).classList.toggle("hidden", k!==id);
     });
     $("#qhead").classList.toggle("hidden", id!=="screen-quiz");
@@ -1152,6 +1196,45 @@ body.lock{overflow:hidden}
   $("#modalX").onclick = closeModal;
   $("#modal").onclick = e => { if (e.target === $("#modal")) closeModal(); };
 
+  $("#codeBtn").onclick = () => tryCode($("#codeInput").value);
+  $("#codeInput").addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); tryCode($("#codeInput").value); }
+  });
+  $("#codeInput").addEventListener("input", e => {
+    e.target.value = e.target.value.replace(/[^0-9a-zA-Z]/g, "").toUpperCase();
+    if ($("#codeErr").textContent) $("#codeErr").textContent = "";
+  });
+
+  /* ============ 访问码 ============ */
+  // 可放多个码：["9900","2026"]，每个码都能进
+  const ACCESS_CODES = ["9900"];
+  const UNLOCK_KEY = "lovePersona.unlock.v1";
+
+  const isUnlocked = () => {
+    try { return localStorage.getItem(UNLOCK_KEY) === "1"; } catch(e){ return false; }
+  };
+  const unlock = () => {
+    try { localStorage.setItem(UNLOCK_KEY, "1"); } catch(e){}
+    show("screen-intro");
+  };
+  let codeTries = 0;
+  const codeFail = msg => {
+    codeTries++;
+    $("#codeErr").textContent = codeTries >= 3
+      ? "访问码不正确。多次失败请凭订单联系客服重发"
+      : msg;
+    const inp = $("#codeInput");
+    inp.classList.remove("shake");
+    void inp.offsetWidth;
+    inp.classList.add("shake");
+  };
+  const tryCode = raw => {
+    const v = String(raw||"").trim().toUpperCase();
+    if (!v) { codeFail("请先输入访问码"); return; }
+    if (ACCESS_CODES.includes(v)) { $("#codeErr").textContent = ""; unlock(); return; }
+    codeFail("访问码不正确，请核对后重试");
+  };
+
   /* ============ 交互绑定 ============ */
   $("#startBtn").onclick = () => { show("screen-pref"); };
 
@@ -1200,6 +1283,15 @@ body.lock{overflow:hidden}
     if (e.key === "ArrowLeft") $("#prevBtn").click();
     if (e.key === "ArrowRight") $("#nextBtn").click();
   });
+
+  // 启动：已解锁直接进首页，否则停在访问码页
+  (function boot(){
+    const q = (new URLSearchParams(location.search).get("code") || "").trim().toUpperCase();
+    if (q && ACCESS_CODES.includes(q)) { unlock(); return; }
+    if (isUnlocked()) { show("screen-intro"); return; }
+    show("screen-gate");
+    setTimeout(()=>{ try { $("#codeInput").focus(); } catch(e){} }, 420);
+  })();
 
   window.addEventListener("resize", ()=>{ if (!state.res) return; });
 
